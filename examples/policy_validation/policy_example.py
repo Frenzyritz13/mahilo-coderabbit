@@ -113,13 +113,15 @@ async def main():
             return False, "Messages containing the word 'forbidden' are not allowed."
         return True, None
     
+    # Enable policies for testing explicitly
     agent_manager.add_heuristic_policy(
         name="no_keyword",
         description="Prevents messages containing the word 'forbidden'",
         policy_function=no_keyword_policy,
-        priority=80
+        priority=80,
+        enabled=True  # Explicitly enable this policy
     )
-    agent_manager.remove_policy()
+    
     # Add a natural language policy
     agent_manager.add_natural_language_policy(
         name="professional_tone",
@@ -130,7 +132,8 @@ async def main():
             "Messages should be clear, concise, and focused on the task at hand. "
             "Informal phrases like 'hey yo', 'what's up', or 'sup' are not allowed."
         ),
-        priority=70
+        priority=70,
+        enabled=True  # Explicitly enable this policy
     )
     
     # Add a natural language policy for sensitive information
@@ -142,7 +145,8 @@ async def main():
             "API keys, or personal identifiable information. "
             "Examples of sensitive information include: 'My password is 12345', 'API key is abcdef', etc."
         ),
-        priority=100
+        priority=100,
+        enabled=True  # Explicitly enable this policy
     )
     
     print("\nPolicies configured:")
