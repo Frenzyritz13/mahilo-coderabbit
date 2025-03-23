@@ -307,3 +307,39 @@ class AgentManager(AgentRegistry):
                 self.enable_policy(name)
             else:
                 print(f"Warning: '{name}' is not a standard policy. Standard policies are: {standard_policies}")
+                
+    def send_message_to_agent_sync(self, sender: str, recipient: str, 
+                            message: str, message_type: MessageType = MessageType.DIRECT,
+                            correlation_id: Optional[str] = None) -> None:
+        """Synchronous version of send_message_to_agent for compatibility with LangGraph.
+        
+        This method wraps the async send_message_to_agent method in a new event loop.
+        Use this method when integrating with frameworks that don't support async tools.
+        
+        Args:
+            sender: The name of the sender agent
+            recipient: The name of the recipient agent
+            message: The message to send
+            message_type: The type of message (default: DIRECT)
+            correlation_id: Optional correlation ID for tracking message threads
+        """
+        import asyncio
+        
+        # Create a new event loop
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+        try:
+            # Run the async method in the new event loop
+            return loop.run_until_complete(
+                self.send_message_to_agent(
+                    sender=sender,
+                    recipient=recipient,
+                    message=message,
+                    message_type=message_type,
+                    correlation_id=correlation_id
+                )
+            )
+        finally:
+            # Clean up the event loop
+            loop.close()
