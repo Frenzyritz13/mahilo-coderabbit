@@ -92,6 +92,10 @@ class PydanticAIAgent(BaseAgent):
             if agent.is_active() and agent.name != self.name
         ]
 
+        # Store the message and response in the session
+        self._session.add_message(message, "user")
+        self._session.add_message(response_text, "assistant")
+
         print("Activated agents:", activated_agents)
         print(f"In process_chat_message: Response for {self.name}: {response_text}")
 
@@ -100,28 +104,49 @@ class PydanticAIAgent(BaseAgent):
             "activated_agents": activated_agents
         }
 
-    async def process_queue_message(self, message: str = None, websockets: List[WebSocket] = []) -> None:
-        """Process a queue message using the PydanticAI agent."""
-        if not message:
-            return
-
-        message_full = f"Message from: {message}"
-        print(f"Queue message for {self.name}: {message_full}")
+    async def process_queue_message(self, websockets: List[WebSocket] = []) -> None:
+        """Process messages from the broker queue."""
+        # Get pending messages from broker
+        pending_messages = self._agent_manager.message_broker.get_pending_messages(self.name)
         
-        available_agents = self.get_contactable_agents_with_description()
-        if message:
-            message_full += f"\n Available agents to chat with: {available_agents}"
-            console.print("[bold blue]🤖 Available Agents:[/bold blue]")
-            for agent_type, desc in available_agents.items():
-                console.print(f"  [green]▪[/green] [cyan]{agent_type}:[/cyan] [dim]{desc}[/dim]")
-            message_full += f"\n Your Agent Name: {self.name}"
-        
-        # Run the PydanticAI agent
-        result = await self._pydantic_agent.run(message_full, deps=self._dependencies)
-        response_text = str(result.data)
+        for envelope in pending_messages:
+            try:
+                # Verify message if signed
+                if self._agent_manager.message_broker.secret_key:
+                    if not envelope.verify(self._agent_manager.message_broker.secret_key):
+                        print(f"Warning: Message {envelope.message_id} failed signature verification")
+                        continue
 
-        # Send the response to the websockets
-        for ws in websockets:
-            await ws.send_text(response_text)
+                # Format message for processing
+                formatted_message = f"{envelope.sender}: {envelope.payload}"
+                message_full = f"Pending messages: {formatted_message}"
+                print(f"Queue message for {self.name}: {message_full}")
+                
+                available_agents = self.get_contactable_agents_with_description()
+                message_full += f"\n Available agents to chat with: {available_agents}"
+                message_full += f"\n Your Agent Name: {self.name}"
+                
+                # Run the PydanticAI agent
+                result = await self._pydantic_agent.run(message_full, deps=self._dependencies)
+                response_text = str(result.data)
 
-        print(f"In process_queue_message: Response for {self.name}: {response_text}")
+                # Store the message and response in the session
+                self._session.add_message(formatted_message, "user")
+                self._session.add_message(response_text, "assistant")
+
+                # Acknowledge successful processing
+                self._agent_manager.message_broker.acknowledge_message(
+                    envelope.message_id, self.name
+                )
+                
+                print(f"In process_queue_message: Response for {self.name}: {response_text}")
+                
+            except Exception as e:
+                print(f"Error processing message {envelope.message_id}: {e}")
+                # Handle failure and retry if needed
+                should_retry = self._agent_manager.message_broker.handle_failure(
+                    envelope.message_id, self.name
+                )
+                if not should_retry:
+                    print(f"Max retries exceeded for message {envelope.message_id}")
+                    # Could send error message back to sender here
