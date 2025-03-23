@@ -31,8 +31,9 @@ class Policy:
                  description: str, 
                  policy_type: PolicyType,
                  policy_content: Union[Callable, str],
-                 enabled: bool = True,
-                 priority: int = 0):
+                 enabled: bool = False,
+                 priority: int = 0,
+                 verbose: bool = False):
         """Initialize a policy.
         
         Args:
@@ -41,8 +42,9 @@ class Policy:
             policy_type: Type of policy (heuristic or natural language)
             policy_content: For heuristic policies, a callable that evaluates messages;
                            for natural language policies, a string describing the policy
-            enabled: Whether the policy is currently active
+            enabled: Whether the policy is currently active (default: False)
             priority: Priority of the policy (higher values = higher priority)
+            verbose: Whether to print logs during policy evaluation (default: False)
         """
         self.name = name
         self.description = description
@@ -50,6 +52,7 @@ class Policy:
         self.policy_content = policy_content
         self.enabled = enabled
         self.priority = priority
+        self.verbose = verbose
     
     async def evaluate(self, 
                 message: MessageEnvelope, 
@@ -136,7 +139,8 @@ class Policy:
             response = await llm_config.chat_completion(messages=messages, model=model_name)
             response_text = response.choices[0].message.content
             
-            print(f"Policy '{self.name}' evaluation response: {response_text}")
+            if self.verbose:
+                print(f"Policy '{self.name}' evaluation response: {response_text}")
             
             # Parse response
             if "COMPLIANCE: YES" in response_text.upper():
@@ -161,17 +165,19 @@ class Policy:
 class PolicyManager:
     """Manages a collection of policies and evaluates messages against them."""
     
-    def __init__(self, validator_model_name: Optional[str] = None):
+    def __init__(self, validator_model_name: Optional[str] = None, verbose: bool = False):
         """Initialize a policy manager.
         
         Args:
             validator_model_name: Optional model name for natural language policies.
                        If not provided, will try to use MAHILO_POLICY_MODEL or MAHILO_LLM_MODEL env var.
                        If env vars are not set, will use the default model from llm_config.
+            verbose: Whether to print logs during policy evaluation (default: False)
         """
         self.policies: List[Policy] = []
         self.model_name = validator_model_name
         self.violation_history: List[PolicyViolation] = []
+        self.verbose = verbose
         
     def add_policy(self, policy: Policy) -> None:
         """Add a policy to the manager.
@@ -179,6 +185,8 @@ class PolicyManager:
         Args:
             policy: The policy to add
         """
+        # Set verbose flag to match manager's setting
+        policy.verbose = self.verbose
         self.policies.append(policy)
         # Sort policies by priority (higher priority first)
         self.policies.sort(key=lambda p: -p.priority)
@@ -225,6 +233,16 @@ class PolicyManager:
         if policy:
             policy.enabled = False
             
+    def set_verbose(self, verbose: bool) -> None:
+        """Set the verbose flag for all policies.
+        
+        Args:
+            verbose: Whether to print logs during policy evaluation
+        """
+        self.verbose = verbose
+        for policy in self.policies:
+            policy.verbose = verbose
+            
     async def evaluate_message(self, 
                         message: MessageEnvelope, 
                         context: Dict) -> Tuple[bool, List[PolicyViolation]]:
@@ -257,8 +275,8 @@ class PolicyManager:
                     if policy.priority >= 100:
                         break
             except Exception as e:
-                # Log error but continue with other policies
-                print(f"Error evaluating policy {policy.name}: {str(e)}")
+                if self.verbose:
+                    print(f"Error evaluating policy {policy.name}: {str(e)}")
                 
         return len(violations) == 0, violations
 
@@ -287,16 +305,17 @@ class MessageValidator:
         """
         return await self.policy_manager.evaluate_message(message, context)
 
-def create_default_policies(validator_model_name: Optional[str] = None) -> List[Policy]:
+def create_default_policies(validator_model_name: Optional[str] = None, verbose: bool = False) -> List[Policy]:
     """Create default policies for the policy manager.
     
     Args:
         validator_model_name: Optional model name for natural language policies.
                    If not provided, will try to use MAHILO_POLICY_MODEL or MAHILO_LLM_MODEL env var.
                    If env vars are not set, will use the default model from llm_config.
+        verbose: Whether to print logs during policy evaluation (default: False)
         
     Returns:
-        List of default policies
+        List of default policies (all disabled by default)
     """
     policies = []
     
@@ -356,7 +375,9 @@ def create_default_policies(validator_model_name: Optional[str] = None) -> List[
         description="Prevents agents from falling into repetitive conversation patterns",
         policy_type=PolicyType.HEURISTIC,
         policy_content=anti_loop_policy,
-        priority=90  # High priority
+        priority=90,  # High priority
+        verbose=verbose,
+        enabled=False
     ))
     
     # Message Length Policy
@@ -379,7 +400,9 @@ def create_default_policies(validator_model_name: Optional[str] = None) -> List[
         description="Ensures messages aren't too long or too short",
         policy_type=PolicyType.HEURISTIC,
         policy_content=message_length_policy,
-        priority=50  # Medium priority
+        priority=50,  # Medium priority
+        verbose=verbose,
+        enabled=False
     ))
     
     # Relevance Policy (requires model name)
@@ -391,7 +414,9 @@ def create_default_policies(validator_model_name: Optional[str] = None) -> List[
             "The message must be relevant to the current task or topic of conversation. "
             "It should not introduce completely unrelated topics without clear justification."
         ),
-        priority=70  # Medium-high priority
+        priority=70,  # Medium-high priority
+        verbose=verbose,
+        enabled=False
     ))
     
     # Toxicity Policy (requires model name)
@@ -404,7 +429,9 @@ def create_default_policies(validator_model_name: Optional[str] = None) -> List[
             "This includes but is not limited to: hate speech, personal attacks, explicit content, "
             "or anything that could be considered harmful to individuals or groups."
         ),
-        priority=100  # Highest priority
+        priority=100,  # Highest priority
+        verbose=verbose,
+        enabled=False
     ))
     
     return policies 

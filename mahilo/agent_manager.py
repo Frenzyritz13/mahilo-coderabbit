@@ -14,7 +14,8 @@ class AgentManager(AgentRegistry):
     for managing agents and their communication.
     """
     def __init__(self, secret_key: str = None, db_path: str = "messages.db", 
-                 service_name: str = "mahilo", validator_model_name: Optional[str] = None):
+                 service_name: str = "mahilo", validator_model_name: Optional[str] = None, 
+                 verbose: bool = False):
         """Initialize an AgentManager.
         
         Args:
@@ -24,16 +25,18 @@ class AgentManager(AgentRegistry):
             validator_model_name: Optional model name for validator.
                        If not provided, will try to use MAHILO_POLICY_MODEL or MAHILO_LLM_MODEL env var.
                        If env vars are not set, will use the default model from llm_config.
+            verbose: Whether to print policy evaluation logs (default: False)
         """
         self.agents: Dict[str, BaseAgent] = {}
         self.store = SQLiteMessageStore(db_path)
         self.telemetry = MahiloTelemetry(service_name)
+        self.verbose = verbose
         
         # Set up policy manager and validator
-        self.policy_manager = PolicyManager(validator_model_name)
+        self.policy_manager = PolicyManager(validator_model_name, verbose=verbose)
         
         # Add default policies
-        for policy in create_default_policies(validator_model_name):
+        for policy in create_default_policies(validator_model_name, verbose=verbose):
             self.policy_manager.add_policy(policy)
             
         self.validator = MessageValidator(self.policy_manager)
@@ -157,6 +160,7 @@ class AgentManager(AgentRegistry):
         Args:
             policy: The policy to add
         """
+        policy.verbose = self.verbose
         self.policy_manager.add_policy(policy)
         
     def remove_policy(self, policy_name: str) -> None:
@@ -226,7 +230,8 @@ class AgentManager(AgentRegistry):
                            name: str, 
                            description: str, 
                            policy_function: Callable,
-                           priority: int = 0) -> None:
+                           priority: int = 0,
+                           enabled: bool = False) -> None:
         """Add a heuristic policy.
         
         Args:
@@ -234,13 +239,16 @@ class AgentManager(AgentRegistry):
             description: Human-readable description of what the policy does
             policy_function: Callable that evaluates messages
             priority: Priority of the policy (higher values = higher priority)
+            enabled: Whether the policy is enabled (default: False)
         """
         policy = Policy(
             name=name,
             description=description,
             policy_type=PolicyType.HEURISTIC,
             policy_content=policy_function,
-            priority=priority
+            priority=priority,
+            verbose=self.verbose,
+            enabled=enabled
         )
         self.add_policy(policy)
         
@@ -248,7 +256,8 @@ class AgentManager(AgentRegistry):
                                   name: str, 
                                   description: str, 
                                   policy_text: str,
-                                  priority: int = 0) -> None:
+                                  priority: int = 0,
+                                  enabled: bool = False) -> None:
         """Add a natural language policy.
         
         Args:
@@ -256,12 +265,45 @@ class AgentManager(AgentRegistry):
             description: Human-readable description of what the policy does
             policy_text: Natural language description of the policy
             priority: Priority of the policy (higher values = higher priority)
+            enabled: Whether the policy is enabled (default: False)
         """
         policy = Policy(
             name=name,
             description=description,
             policy_type=PolicyType.NATURAL_LANGUAGE,
             policy_content=policy_text,
-            priority=priority
+            priority=priority,
+            verbose=self.verbose,
+            enabled=enabled
         )
         self.add_policy(policy)
+
+    def set_verbose(self, verbose: bool) -> None:
+        """Set the verbose flag for policy logging.
+        
+        Args:
+            verbose: Whether to print logs during policy evaluation
+        """
+        self.verbose = verbose
+        self.policy_manager.set_verbose(verbose)
+
+    def enable_standard_policies(self, policy_names: List[str] = None) -> None:
+        """Enable standard policies by name.
+        
+        If no policy names are provided, enables all standard policies.
+        
+        Args:
+            policy_names: Optional list of policy names to enable. If None, enables all standard policies.
+        """
+        standard_policies = ["anti_loop", "message_length", "relevance", "toxicity"]
+        
+        # If no specific policy names provided, enable all standard policies
+        if policy_names is None:
+            policy_names = standard_policies
+        
+        # Enable each requested policy if it exists
+        for name in policy_names:
+            if name in standard_policies:
+                self.enable_policy(name)
+            else:
+                print(f"Warning: '{name}' is not a standard policy. Standard policies are: {standard_policies}")
