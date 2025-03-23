@@ -422,26 +422,12 @@ class BaseAgent:
                     if function_name == "contact_human":
                         function_response = await function_to_call(**function_args, websockets=websockets)
                     else:
-                        # First try: Execute function normally
-                        try:
-                            function_response = function_to_call(**function_args)
-                        except TypeError as e:
-                            # Check if the error suggests the function should be awaited
-                            if "coroutine" in str(e) or "awaitable" in str(e):
-                                # Second try: Execute with await if it's a coroutine
-                                if inspect.iscoroutinefunction(function_to_call):
-                                    function_response = await function_to_call(**function_args)
-                                else:
-                                    # If it's not a coroutine function but returned a coroutine
-                                    coroutine_result = function_to_call(**function_args)
-                                    if inspect.iscoroutine(coroutine_result):
-                                        function_response = await coroutine_result
-                                    else:
-                                        # Re-raise the original error if we can't handle it
-                                        raise
-                            else:
-                                # Re-raise if it's not a coroutine-related error
-                                raise
+                        # Execute function and handle coroutines if needed
+                        function_response = function_to_call(**function_args)
+                        
+                        # Check if the result is a coroutine immediately
+                        if inspect.iscoroutine(function_response):
+                            function_response = await function_response
                         
                         # Convert responses to appropriate string format
                         if isinstance(function_response, dict):
@@ -556,7 +542,7 @@ class BaseAgent:
                     tool_choice="auto",
                 )
 
-                print("In queue fn:", response.choices[0].message)
+                print("In queue fn mahilo:", response.choices[0].message)
                 
                 # Process response and tool calls as before...
                 response_message = response.choices[0].message
@@ -583,26 +569,12 @@ class BaseAgent:
                             if function_name == "contact_human":
                                 function_response = await function_to_call(**function_args, websockets=websockets)
                             else:
-                                # First try: Execute function normally
-                                try:
-                                    function_response = function_to_call(**function_args)
-                                except TypeError as e:
-                                    # Check if the error suggests the function should be awaited
-                                    if "coroutine" in str(e) or "awaitable" in str(e):
-                                        # Second try: Execute with await if it's a coroutine
-                                        if inspect.iscoroutinefunction(function_to_call):
-                                            function_response = await function_to_call(**function_args)
-                                        else:
-                                            # If it's not a coroutine function but returned a coroutine
-                                            coroutine_result = function_to_call(**function_args)
-                                            if inspect.iscoroutine(coroutine_result):
-                                                function_response = await coroutine_result
-                                            else:
-                                                # Re-raise the original error if we can't handle it
-                                                raise
-                                    else:
-                                        # Re-raise if it's not a coroutine-related error
-                                        raise
+                                # Execute function and handle coroutines if needed
+                                function_response = function_to_call(**function_args)
+                                
+                                # Check if the result is a coroutine immediately
+                                if inspect.iscoroutine(function_response):
+                                    function_response = await function_response
                                 
                                 # Convert responses to appropriate string format
                                 if isinstance(function_response, dict):
@@ -760,6 +732,11 @@ class BaseAgent:
                             continue
                         try:
                             function_response = function_to_call(**function_args)
+                            
+                            # Check if the result is a coroutine immediately
+                            if inspect.iscoroutine(function_response):
+                                function_response = await function_response
+                                
                             print(f"Function response: {function_response}")
                             function_call_args = function_args
                         except Exception as e:
