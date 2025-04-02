@@ -418,39 +418,25 @@ class BaseAgent:
                 function_to_call = available_functions[function_name]
                 function_args = json.loads(tool_call.function.arguments)
                 try:
-                    # Always await contact_human
+                    # All functions are handled uniformly with coroutine checking
+                    # Just pass the websockets parameter to contact_human when needed
                     if function_name == "contact_human":
-                        function_response = await function_to_call(**function_args, websockets=websockets)
-                    else:
-                        # First try: Execute function normally
-                        try:
-                            function_response = function_to_call(**function_args)
-                        except TypeError as e:
-                            # Check if the error suggests the function should be awaited
-                            if "coroutine" in str(e) or "awaitable" in str(e):
-                                # Second try: Execute with await if it's a coroutine
-                                if inspect.iscoroutinefunction(function_to_call):
-                                    function_response = await function_to_call(**function_args)
-                                else:
-                                    # If it's not a coroutine function but returned a coroutine
-                                    coroutine_result = function_to_call(**function_args)
-                                    if inspect.iscoroutine(coroutine_result):
-                                        function_response = await coroutine_result
-                                    else:
-                                        # Re-raise the original error if we can't handle it
-                                        raise
-                            else:
-                                # Re-raise if it's not a coroutine-related error
-                                raise
+                        function_args["websockets"] = websockets
                         
-                        # Convert responses to appropriate string format
-                        if isinstance(function_response, dict):
-                            function_response = json.dumps(function_response)
-                        elif isinstance(function_response, list):
-                            function_response = [
-                                json.dumps(item) if isinstance(item, dict) else str(item)
-                                for item in function_response
-                            ]
+                    function_response = function_to_call(**function_args)
+                    
+                    # Check if the result is a coroutine immediately
+                    if inspect.iscoroutine(function_response):
+                        function_response = await function_response
+                    
+                    # Convert responses to appropriate string format
+                    if isinstance(function_response, dict):
+                        function_response = json.dumps(function_response)
+                    elif isinstance(function_response, list):
+                        function_response = [
+                            json.dumps(item) if isinstance(item, dict) else str(item)
+                            for item in function_response
+                        ]
                 except Exception as e:
                     print(f"Error calling function {function_name}: {e}")
                     continue
@@ -556,7 +542,7 @@ class BaseAgent:
                     tool_choice="auto",
                 )
 
-                print("In queue fn:", response.choices[0].message)
+                print("In queue fn mahilo:", response.choices[0].message)
                 
                 # Process response and tool calls as before...
                 response_message = response.choices[0].message
@@ -579,39 +565,25 @@ class BaseAgent:
                         function_to_call = available_functions[function_name]
                         function_args = json.loads(tool_call.function.arguments)
                         try:
-                            # Always await contact_human
+                            # All functions are handled uniformly with coroutine checking
+                            # Just pass the websockets parameter to contact_human when needed
                             if function_name == "contact_human":
-                                function_response = await function_to_call(**function_args, websockets=websockets)
-                            else:
-                                # First try: Execute function normally
-                                try:
-                                    function_response = function_to_call(**function_args)
-                                except TypeError as e:
-                                    # Check if the error suggests the function should be awaited
-                                    if "coroutine" in str(e) or "awaitable" in str(e):
-                                        # Second try: Execute with await if it's a coroutine
-                                        if inspect.iscoroutinefunction(function_to_call):
-                                            function_response = await function_to_call(**function_args)
-                                        else:
-                                            # If it's not a coroutine function but returned a coroutine
-                                            coroutine_result = function_to_call(**function_args)
-                                            if inspect.iscoroutine(coroutine_result):
-                                                function_response = await coroutine_result
-                                            else:
-                                                # Re-raise the original error if we can't handle it
-                                                raise
-                                    else:
-                                        # Re-raise if it's not a coroutine-related error
-                                        raise
+                                function_args["websockets"] = websockets
                                 
-                                # Convert responses to appropriate string format
-                                if isinstance(function_response, dict):
-                                    function_response = json.dumps(function_response)
-                                elif isinstance(function_response, list):
-                                    function_response = [
-                                        json.dumps(item) if isinstance(item, dict) else str(item)
-                                        for item in function_response
-                                    ]
+                            function_response = function_to_call(**function_args)
+                            
+                            # Check if the result is a coroutine immediately
+                            if inspect.iscoroutine(function_response):
+                                function_response = await function_response
+                            
+                            # Convert responses to appropriate string format
+                            if isinstance(function_response, dict):
+                                function_response = json.dumps(function_response)
+                            elif isinstance(function_response, list):
+                                function_response = [
+                                    json.dumps(item) if isinstance(item, dict) else str(item)
+                                    for item in function_response
+                                ]
                         except Exception as e:
                             print(f"Error calling function {function_name}: {e}")
                             continue
@@ -760,6 +732,11 @@ class BaseAgent:
                             continue
                         try:
                             function_response = function_to_call(**function_args)
+                            
+                            # Check if the result is a coroutine immediately
+                            if inspect.iscoroutine(function_response):
+                                function_response = await function_response
+                                
                             print(f"Function response: {function_response}")
                             function_call_args = function_args
                         except Exception as e:
