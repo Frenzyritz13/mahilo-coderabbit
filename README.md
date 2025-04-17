@@ -3,6 +3,8 @@
 </h1>
 </div>
 
+  ![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/Frenzyritz13/mahilo-coderabbit?utm_source=oss&utm_medium=github&utm_campaign=Frenzyritz13%2Fmahilo-coderabbit&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)
+
   [![PyPi][pypiversion-shield]][pypi-url]
   [![PyPi][downloads-shield]][downloads-url]
   [![License][license-shield]][license-url]
